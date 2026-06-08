@@ -200,6 +200,15 @@ const store = createStore(rootReducer, applyMiddleware(thunk));
 // Redux Toolkit:
 import { configureStore } from '@reduxjs/toolkit';
 const store = configureStore({ reducer: rootReducer }); // thunk уже внутри
+
+// BUG (mutation - изменение состояния напрямую - опасно)
+state.users.push(newUser);
+
+// Good practice
+// Нельзя изменять состяние напрямую, нужно создавать копию
+return { ...state, users: [...state.users, newUser] };
+
+
 ```
 
 ---
@@ -238,6 +247,24 @@ console.log(counterSlice.name);       // 'counter'
 export const { increment, decrement } = counterSlice.actions;
 export default counterSlice.reducer;
 ```
+createSlice({ name: 'users', initialState: [], reducers: {...} })
+                           │
+                           ▼
+              ┌─────────────────────────┐
+              │      ОБЪЕКТ SLICE       │
+              ├─────────────────────────┤
+              │ name: "users"           │
+              │                         │
+              │ reducer: fn()           │──────→ для configureStore()
+              │                         │
+              │ actions: {              │
+              │   addTodo: fn()         │──────→ для dispatch() в компонентах
+              │   toggleTodo: fn()      │
+              │   deleteTodo: fn()      │
+              │ }                       │
+              │                         │
+              │ caseReducers: {...}     │──────→ (редко нужно 1% использования)
+              └─────────────────────────┘
 
 ---
 
@@ -269,7 +296,31 @@ export const useAppSelector: TypedUseSelectorHook<RootState> = useSelector;
 // В компоненте:
 const dispatch = useAppDispatch();
 const user = useAppSelector(state => state.user);
+
 ```
+┌─────────────────────────────────────────────────────────┐
+│  ХУКИ — это функции, которые:                           │
+│  • Начинаются с "use" (useState, useEffect, useContext..│
+│  • Дают доступ к возможностям React                     │
+│  • Можно создавать свои (кастомные хуки)                │
+└─────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────┐
+│  В НАШЕМ СЛУЧАЕ:                                       │
+│                                                         │
+│  Оригинальные хуки:  useSelector, useDispatch          │
+│         ↓                                               │
+│  Добавляем типы:   useAppSelector, useAppDispatch      │
+│         ↓                                               │
+│  Это НАШИ кастомные хуки с предустановленными типами    │
+└─────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────┐
+│  ЗАПОМНИ:                                               │
+│  • Хуки создаются один раз в hooks.ts                   │
+│  • Хуки используются во всех компонентах                │
+│  • Хуки делают код чище и безопаснее                    │
+└─────────────────────────────────────────────────────────┘
 
 ---
 
