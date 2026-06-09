@@ -1,4 +1,4 @@
-# React Router v6 — Полный обзор
+# React Router v6 — Полный обзор + практика
 
 ## Что такое React Router?
 
