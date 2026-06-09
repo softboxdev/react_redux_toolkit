@@ -601,6 +601,7 @@ function App() {
             <Route path="/" element={<Home />} />
             <Route path="/about" element={<About />} />
             <Route path="/users/:id" element={<UserProfile />} />
+            <Route path="products/*" element={<ProductsPage />}>
             
             {/* Защищённые маршруты */}
             <Route element={<PrivateRoute />}>
