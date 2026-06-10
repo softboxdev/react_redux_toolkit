@@ -614,3 +614,540 @@ export const fetchUsers = createAsyncThunk('users/fetch', async () => {
 
 // Редюсер обрабатывает через extraReducers
 ```
+
+## Что даёт Thunk? (преимущества)
+
+| Без Thunk | С Thunk |
+|-----------|---------|
+| ❌ Нельзя делать запросы к серверу | ✅ Можно делать асинхронные запросы |
+| ❌ Нельзя использовать таймеры | ✅ Можно использовать setTimeout |
+| ❌ Весь код синхронный | ✅ Можно писать асинхронный код |
+| ❌ Нужно подключать дополнительные библиотеки | ✅ Встроен в Redux Toolkit |
+| ❌ Сложно обрабатывать состояния загрузки | ✅ Легко отслеживать статус |
+
+---
+
+**Thunk** — это специальная функция-посредник, которая позволяет Redux работать с асинхронными операциями (запросами к серверу, таймерами, чтением файлов).
+
+**Аналогия из жизни:** Представьте, что Redux — это ресторан, а Thunk — это официант.
+
+```
+БЕЗ THUNK (только синхронные заказы):
+┌─────────────────────────────────────────────────────────────────┐
+│ Вы: "Мне пиццу!"                                                │
+│ Redux: "Понял, несу пиццу" → сразу даёт результат              │
+│ (можно заказать только то, что уже есть на кухне)              │
+└─────────────────────────────────────────────────────────────────┘
+
+С THUNK (можно заказать то, чего нет в наличии):
+┌─────────────────────────────────────────────────────────────────┐
+│ Вы: "Мне пиццу!"                                                │
+│ Thunk (официант): "Схожу на кухню, закажу приготовить"         │
+│          → идёт на кухню, ждёт 10 минут                         │
+│          → получает готовую пиццу                               │
+│          → приносит её вам                                      │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Проблема, которую решает Thunk
+
+### Обычный Redux (без Thunk)
+
+```javascript
+// ❌ Redux НЕ УМЕЕТ работать с асинхронным кодом
+function loadUser() {
+  // Эта функция НЕ СРАБОТАЕТ!
+  return async (dispatch) => {
+    const user = await fetch('/api/user');
+    dispatch({ type: 'SET_USER', payload: user });
+  };
+}
+
+dispatch(loadUser()); // Ошибка: Redux ожидает объект, а получил функцию
+```
+
+**Почему не работает:** Redux ожидает, что `dispatch` получит **простой объект** (action), а не функцию.
+
+### С Thunk (всё работает)
+
+```javascript
+// ✅ С Thunk можно!
+function loadUser() {
+  return async (dispatch) => {
+    const user = await fetch('/api/user');
+    dispatch({ type: 'SET_USER', payload: user });
+  };
+}
+
+dispatch(loadUser()); // Thunk обработает функцию
+```
+
+---
+
+## Что такое Thunk простыми словами?
+
+**Thunk** — это middleware (промежуточный слой), который:
+1. Проверяет: что отправили в `dispatch`?
+2. Если **объект** → передаёт дальше в редюсер (как обычно)
+3. Если **функция** → запускает её и даёт ей доступ к `dispatch`
+
+### Визуализация работы Thunk
+
+```
+dispatch(обычный_объект)
+═══════════════════════════════════════════════════════════════════
+
+dispatch({ type: 'INCREMENT' })
+         │
+         ▼
+    ┌─────────┐
+    │  Thunk  │ → "Это объект? Да, отправляю в редюсер"
+    └────┬────┘
+         │
+         ▼
+      Reducer
+
+
+dispatch(функция)
+═══════════════════════════════════════════════════════════════════
+
+dispatch(async (dispatch) => {
+  const data = await fetch(...);
+  dispatch({ type: 'SET', payload: data });
+})
+         │
+         ▼
+    ┌─────────┐
+    │  Thunk  │ → "Это функция? Запускаю её и даю ей dispatch"
+    └────┬────┘
+         │
+         ▼
+    Выполняется функция:
+    ┌─────────────────────────────────────┐
+    │ 1. Ждём ответ от сервера...         │
+    │ 2. Получили данные                  │
+    │ 3. Вызываем dispatch с объектом     │
+    │ 4. Объект идёт в редюсер            │
+    └─────────────────────────────────────┘
+```
+
+---
+
+## Как Thunk выглядит в коде
+
+### Простейший Thunk
+
+```javascript
+// Это Thunk - функция, которая возвращает другую функцию
+function simpleThunk() {
+  // Возвращаем функцию, которая получит dispatch от Redux
+  return function(dispatch) {
+    // Здесь можно делать что угодно
+    console.log('Thunk выполняется!');
+    dispatch({ type: 'ACTION' });
+  };
+}
+
+// Использование
+dispatch(simpleThunk());
+```
+
+### Thunk с асинхронным кодом
+
+```javascript
+// Thunk для загрузки данных с сервера
+function fetchUserThunk(userId) {
+  // Возвращаем асинхронную функцию
+  return async function(dispatch) {
+    // 1. Сообщаем, что начали загрузку
+    dispatch({ type: 'FETCH_USER_START' });
+    
+    try {
+      // 2. Ждём ответ от сервера (асинхронно)
+      const response = await fetch(`/api/users/${userId}`);
+      const user = await response.json();
+      
+      // 3. Когда данные пришли, отправляем их в редюсер
+      dispatch({ type: 'FETCH_USER_SUCCESS', payload: user });
+    } catch (error) {
+      // 4. Если ошибка, отправляем ошибку
+      dispatch({ type: 'FETCH_USER_ERROR', error: error.message });
+    }
+  };
+}
+
+// Использование в компоненте
+dispatch(fetchUserThunk(123));
+```
+
+---
+
+## Диаграмма: Полный цикл работы Thunk
+
+```
+КОМПОНЕНТ                     THUNK                     API СЕРВЕР
+    │                           │                            │
+    │  dispatch(fetchUser(123)) │                            │
+    ├──────────────────────────►│                            │
+    │                           │                            │
+    │                           │  dispatch({ type: 'PENDING' })
+    │                           ├────────────┐               │
+    │                           │            │               │
+    │                           │◄───────────┘               │
+    │                           │                            │
+    │   (компонент показывает   │                            │
+    │    спиннер загрузки)      │                            │
+    │                           │                            │
+    │                           │  await fetch(...)          │
+    │                           ├───────────────────────────►│
+    │                           │                            │
+    │                           │     (ждём ответ... ⏰)      │
+    │                           │                            │
+    │                           │◄───────────────────────────┤
+    │                           │       user data            │
+    │                           │                            │
+    │                           │  dispatch({ type: 'SUCCESS', payload })
+    │                           ├────────────┐               │
+    │                           │            │               │
+    │                           │◄───────────┘               │
+    │                           │                            │
+    │   (компонент показывает   │                            │
+    │    данные пользователя)   │                            │
+    │◄──────────────────────────┤                            │
+    │                           │                            │
+```
+
+---
+
+## Redux Toolkit и Thunk
+
+В Redux Toolkit Thunk уже **встроен**! Не нужно ничего устанавливать или подключать.
+
+### createAsyncThunk (упрощённая версия Thunk)
+
+```javascript
+import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
+
+// createAsyncThunk сам создаёт Thunk!
+export const fetchUser = createAsyncThunk(
+  'user/fetch',           // имя
+  async (userId) => {     // асинхронная функция
+    const response = await fetch(`/api/users/${userId}`);
+    return response.json();
+  }
+);
+
+// То, что создал createAsyncThunk:
+// fetchUser.pending   - экшен для начала загрузки
+// fetchUser.fulfilled - экшен для успешной загрузки  
+// fetchUser.rejected  - экшен для ошибки
+
+const userSlice = createSlice({
+  name: 'user',
+  initialState: { data: null, status: 'idle' },
+  extraReducers: (builder) => {
+    builder
+      .addCase(fetchUser.pending, (state) => {
+        state.status = 'loading';
+      })
+      .addCase(fetchUser.fulfilled, (state, action) => {
+        state.status = 'succeeded';
+        state.data = action.payload;
+      })
+      .addCase(fetchUser.rejected, (state) => {
+        state.status = 'failed';
+      });
+  }
+});
+```
+
+---
+
+## Сравнение: ручной Thunk vs createAsyncThunk
+
+### Ручной Thunk (без Redux Toolkit)
+
+```javascript
+// ❌ Много ручного кода
+function fetchUser(id) {
+  return async (dispatch) => {
+    dispatch({ type: 'FETCH_USER_START' });
+    
+    try {
+      const response = await fetch(`/api/users/${id}`);
+      const user = await response.json();
+      dispatch({ type: 'FETCH_USER_SUCCESS', payload: user });
+    } catch (error) {
+      dispatch({ type: 'FETCH_USER_ERROR', error: error.message });
+    }
+  };
+}
+
+// В редюсере нужно вручную обрабатывать три экшена
+```
+
+### createAsyncThunk (Redux Toolkit)
+
+```javascript
+// ✅ Коротко и понятно
+export const fetchUser = createAsyncThunk(
+  'user/fetch',
+  async (id) => {
+    const response = await fetch(`/api/users/${id}`);
+    return response.json();
+  }
+);
+// Три экшена создаются автоматически!
+```
+
+---
+
+
+## Реальный пример: загрузка списка товаров
+
+```jsx
+// productsSlice.js
+import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
+import axios from 'axios';
+
+// 1. Создаём Thunk для загрузки товаров
+export const fetchProducts = createAsyncThunk(
+  'products/fetchProducts',
+  async () => {
+    const response = await axios.get('https://fakestoreapi.com/products');
+    return response.data; // то, что попадёт в action.payload
+  }
+);
+
+// 2. Создаём слайс
+const productsSlice = createSlice({
+  name: 'products',
+  initialState: {
+    items: [],
+    status: 'idle',     // 'idle' | 'loading' | 'succeeded' | 'failed'
+    error: null
+  },
+  reducers: {},
+  extraReducers: (builder) => {
+    builder
+      .addCase(fetchProducts.pending, (state) => {
+        state.status = 'loading';  // началась загрузка
+      })
+      .addCase(fetchProducts.fulfilled, (state, action) => {
+        state.status = 'succeeded'; // загрузка успешна
+        state.items = action.payload; // сохраняем товары
+      })
+      .addCase(fetchProducts.rejected, (state, action) => {
+        state.status = 'failed';  // ошибка
+        state.error = action.error.message;
+      });
+  }
+});
+
+export default productsSlice.reducer;
+
+// ProductsList.jsx
+import { useEffect } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
+import { fetchProducts } from './productsSlice';
+
+function ProductsList() {
+  const dispatch = useDispatch();
+  const { items, status, error } = useSelector(state => state.products);
+  
+  // Загружаем товары при монтировании компонента
+  useEffect(() => {
+    if (status === 'idle') {
+      dispatch(fetchProducts()); // ← вызываем Thunk!
+    }
+  }, [status, dispatch]);
+  
+  if (status === 'loading') return <div>Загрузка товаров...</div>;
+  if (status === 'failed') return <div>Ошибка: {error}</div>;
+  
+  return (
+    <ul>
+      {items.map(product => (
+        <li key={product.id}>{product.title} - ${product.price}</li>
+      ))}
+    </ul>
+  );
+}
+```
+
+---
+
+## Что происходит под капотом?
+
+```javascript
+// Упрощённая реализация Thunk middleware
+const thunkMiddleware = (store) => (next) => (action) => {
+  // Если action — это функция
+  if (typeof action === 'function') {
+    // Вызываем её и передаём dispatch и getState
+    return action(store.dispatch, store.getState);
+  }
+  
+  // Если action — это объект, передаём дальше
+  return next(action);
+};
+
+// Как это работает:
+// 1. Вы вызываете dispatch(fetchProducts())
+// 2. fetchProducts() возвращает функцию
+// 3. Thunk видит: "это функция"
+// 4. Thunk запускает эту функцию
+// 5. Функция может делать асинхронные операции
+// 6. Когда данные готовы, функция вызывает dispatch с объектом
+// 7. Объект идёт в редюсер
+```
+
+---
+
+## Thunk с параметрами
+
+```javascript
+// Thunk, который принимает параметры
+export const fetchUserPosts = createAsyncThunk(
+  'posts/fetchUserPosts',
+  async (userId, { rejectWithValue }) => {
+    try {
+      const response = await fetch(`/api/users/${userId}/posts`);
+      return await response.json();
+    } catch (err) {
+      return rejectWithValue(err.message);
+    }
+  }
+);
+
+// В компоненте
+function UserPosts({ userId }) {
+  const dispatch = useDispatch();
+  const { posts, status } = useSelector(state => state.posts);
+  
+  useEffect(() => {
+    dispatch(fetchUserPosts(userId)); // ← передаём параметр
+  }, [userId, dispatch]);
+  
+  // ...
+}
+```
+
+---
+
+## Thunk с доступом к состоянию (getState)
+
+```javascript
+export const addToCart = createAsyncThunk(
+  'cart/addToCart',
+  async (productId, { getState, rejectWithValue }) => {
+    // Получаем текущее состояние
+    const state = getState();
+    const product = state.products.items.find(p => p.id === productId);
+    
+    if (!product) {
+      return rejectWithValue('Товар не найден');
+    }
+    
+    if (product.stock === 0) {
+      return rejectWithValue('Товар закончился');
+    }
+    
+    // Добавляем в корзину
+    return { id: productId, name: product.name, price: product.price };
+  }
+);
+```
+
+---
+
+## Частые ошибки с Thunk
+
+### Ошибка 1: Забыли импортировать Thunk
+
+```javascript
+// ❌ ОШИБКА: Redux Toolkit уже включает Thunk, ничего подключать не нужно!
+import thunk from 'redux-thunk'; // лишнее
+const store = configureStore({
+  reducer: rootReducer,
+  middleware: [thunk] // лишнее
+});
+
+// ✅ ПРАВИЛЬНО: Thunk уже внутри configureStore
+const store = configureStore({
+  reducer: rootReducer
+});
+```
+
+### Ошибка 2: Неправильный return в createAsyncThunk
+
+```javascript
+// ❌ ОШИБКА: забыли вернуть данные
+export const fetchUser = createAsyncThunk('user/fetch', async (id) => {
+  const response = await fetch(`/api/users/${id}`);
+  // нет return → action.payload = undefined
+});
+
+// ✅ ПРАВИЛЬНО: возвращаем данные
+export const fetchUser = createAsyncThunk('user/fetch', async (id) => {
+  const response = await fetch(`/api/users/${id}`);
+  const data = await response.json();
+  return data; // ← важно!
+});
+```
+
+### Ошибка 3: Вызов Thunk вне useEffect
+
+```javascript
+// ❌ ОШИБКА: бесконечный цикл
+function Component() {
+  const dispatch = useDispatch();
+  dispatch(fetchProducts()); // каждый рендер вызывает Thunk!
+}
+
+// ✅ ПРАВИЛЬНО: в useEffect
+function Component() {
+  const dispatch = useDispatch();
+  useEffect(() => {
+    dispatch(fetchProducts()); // один раз при монтировании
+  }, [dispatch]);
+}
+```
+
+---
+
+## Шпаргалка по Thunk
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                          THUNK                                  │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ЧТО ЭТО: Функция, которая возвращает другую функцию           │
+│                                                                 │
+│  ЗАЧЕМ: Позволяет Redux работать с асинхронным кодом           │
+│                                                                 │
+│  КАК РАБОТАЕТ:                                                  │
+│  1. Вы вызываете dispatch(thunkFunction())                      │
+│  2. Thunk middleware проверяет: "это функция?"                  │
+│  3. Запускает функцию и даёт ей dispatch                        │
+│  4. Функция делает асинхронную операцию                         │
+│  5. Функция вызывает dispatch с обычным объектом                │
+│  6. Объект идёт в редюсер                                       │
+│                                                                 │
+│  В REDUX TOOLKIT:                                               │
+│  - Thunk уже встроен в configureStore                           │
+│  - Используйте createAsyncThunk для создания Thunk              │
+│  - Не нужно подключать вручную!                                 │
+│                                                                 │
+│  ПРИМЕР:                                                        │
+│  const fetchUser = createAsyncThunk('user/fetch', async (id) =>│
+│    (await fetch(`/api/users/${id}`)).json()                    │
+│  );                                                             │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Золотое правило:** Если вам нужно сделать запрос к серверу, подождать, использовать таймер или любую другую асинхронную операцию — используйте Thunk (через `createAsyncThunk` в Redux Toolkit). Это стандартный и самый простой способ работать с асинхронностью в Redux! 🚀
